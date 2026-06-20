@@ -428,20 +428,44 @@ def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = T
                 update_status(job_id, "done", 100, "完成しました！")
                 return
 
-            # STEP6: 動画合成
+            # STEP6: 動画合成（音声差し替え）
             update_status(job_id, "processing", 92, "動画に英語音声を合成中...")
+            merged_path = os.path.join(tmpdir, "merged.mp4")
             result = subprocess.run(
                 ["ffmpeg", "-y",
                  "-i", input_path, "-i", en_wav,
                  "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                  "-map", "0:v:0", "-map", "1:a:0",
-                 "-shortest", str(job_dir / "output.mp4")],
+                 "-shortest", merged_path],
                 capture_output=True, text=True,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"動画合成エラー: {result.stderr[-500:]}")
 
-        update_status(job_id, "done", 100, "完成しました！動画をダウンロードできます。")
+            # STEP7: 字幕焼き込み
+            update_status(job_id, "processing", 96, "字幕を動画に焼き込み中...")
+            srt_path = str(job_dir / "subtitle.srt")
+            output_path = str(job_dir / "output.mp4")
+
+            # SRTパスのコロンをエスケープ（ffmpegのsubtitlesフィルタ要件）
+            srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
+
+            subtitle_result = subprocess.run(
+                ["ffmpeg", "-y",
+                 "-i", merged_path,
+                 "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2'",
+                 "-c:a", "copy",
+                 output_path],
+                capture_output=True, text=True,
+            )
+            if subtitle_result.returncode != 0:
+                # 字幕焼き込み失敗時は字幕なしで出力
+                print(f"[字幕焼き込み失敗] {subtitle_result.stderr[-300:]}")
+                print("字幕なしで出力します...")
+                import shutil
+                shutil.copy(merged_path, output_path)
+
+        update_status(job_id, "done", 100, "完成しました！字幕付き動画をダウンロードできます。")
 
     except Exception as e:
         update_status(job_id, "error", 0, f"エラー: {e}")
