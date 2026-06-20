@@ -106,12 +106,13 @@ async def run_job(
     background_tasks: BackgroundTasks,
     voice: str = Form(default="female"),
     subtitle: bool = Form(default=True),
+    subtitle_lang: str = Form(default="en"),
 ):
     if not (JOBS_DIR / job_id).exists():
         return JSONResponse({"error": "ジョブが見つかりません"}, status_code=404)
 
     update_status(job_id, "processing", 0, "処理を開始しています...")
-    background_tasks.add_task(run_pipeline, job_id, voice, subtitle)
+    background_tasks.add_task(run_pipeline, job_id, voice, subtitle, subtitle_lang)
 
     return {"started": True}
 
