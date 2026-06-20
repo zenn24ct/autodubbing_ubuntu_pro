@@ -87,6 +87,14 @@
         <option value="female2">女性 - Sonia（イギリス英語）</option>
         <option value="male2">男性 - Ryan（イギリス英語）</option>
       </select>
+      <label style="margin-top:.75rem;">字幕の言語</label>
+      <select id="subtitle-lang-select">
+        <option value="en">英語字幕（翻訳後テキスト）</option>
+        <option value="ja">日本語字幕（編集済み優先）</option>
+      </select>
+      <small style="color:#64748b; font-size:.8rem; display:block; margin-top:.25rem;">
+        ※字幕は動画に焼き込まれます。長い字幕は自動的に2行に分割されます。
+      </small>
     </div>
   </div>
 
@@ -175,9 +183,11 @@
   document.getElementById('run-btn')?.addEventListener('click', async () => {
     if (!currentJobId) return;
     const voice = document.getElementById('voice-select').value;
+    const subtitleLang = document.getElementById('subtitle-lang-select').value;
     const fd = new FormData();
     fd.append('voice', voice);
     fd.append('subtitle', 'true');
+    fd.append('subtitle_lang', subtitleLang);
     await fetch(`/jobs/${currentJobId}/run`, { method: 'POST', body: fd });
     startPolling();
   });
