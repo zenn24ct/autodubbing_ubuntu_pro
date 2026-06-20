@@ -316,24 +316,8 @@ def _sec_to_srt(s: float) -> str:
 
 
 def _wrap_subtitle(text: str, lang: str = "en") -> str:
-    """長い字幕を最大2行に分割する。"""
-    # 言語ごとの1行あたり最大文字数
-    max_chars = 20 if lang == "ja" else 42
-    text = text.strip()
-    if len(text) <= max_chars:
-        return text
-
-    # スペース（英語）または句読点（日本語）で折り返し
-    if lang == "ja":
-        # 日本語: max_chars文字ごとに分割
-        lines = [text[i:i+max_chars] for i in range(0, len(text), max_chars)]
-    else:
-        # 英語: 単語境界で折り返し
-        import textwrap
-        lines = textwrap.wrap(text, width=max_chars)
-
-    # 最大2行まで
-    return "\n".join(lines[:2])
+    """字幕テキストをそのまま返す（分割なし）。"""
+    return text.strip()
 
 
 def generate_srt(segments: list[dict], output_path: str, lang: str = "en") -> None:
@@ -490,7 +474,7 @@ def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = T
             subtitle_result = subprocess.run(
                 ["ffmpeg", "-y",
                  "-i", merged_path,
-                 "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2,MarginV=40,WrapStyle=2'",
+                 "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2,MarginV=20'",
                  "-c:a", "copy",
                  output_path],
                 capture_output=True, text=True,
