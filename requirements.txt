@@ -1,0 +1,10 @@
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+openai-whisper>=20231117
+edge-tts>=6.1.9
+pydub>=0.25.1
+deep-translator>=1.11.4
+numpy>=1.24.0
+anthropic>=0.25.0
+python-dotenv>=1.0.0

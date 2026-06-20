@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日本語テキスト 確認・編集</title>
+<style>
+  :root {
+    --primary: #2563eb; --primary-dark: #1d4ed8;
+    --success: #16a34a; --bg: #f8fafc;
+    --card: #ffffff; --border: #e2e8f0; --text: #1e293b; --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI','Hiragino Sans',sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--primary); color: #fff; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 1.1rem; font-weight: 700; }
+  .toolbar { background: #fff; border-bottom: 1px solid var(--border); padding: .75rem 1.5rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+  button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: .5rem 1.1rem; font-size: .875rem; font-weight: 600; cursor: pointer; }
+  button:hover { background: var(--primary-dark); }
+  .btn-success { background: var(--success); }
+  .btn-success:hover { background: #15803d; }
+  .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+  .btn-outline:hover { background: #eff6ff; }
+  #save-msg { font-size: .875rem; color: var(--success); font-weight: 500; }
+  main { max-width: 900px; margin: 1.5rem auto; padding: 0 1rem 4rem; }
+  .info { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: .75rem 1rem; font-size: .875rem; color: #1d4ed8; margin-bottom: 1.25rem; }
+  .seg-row {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem; margin-bottom: .75rem;
+    display: grid; grid-template-columns: 90px 1fr 60px; gap: .75rem; align-items: start;
+  }
+  .seg-row:hover { border-color: #93c5fd; }
+  .time-cell { color: var(--muted); font-size: .8rem; line-height: 1.6; padding-top: .35rem; }
+  textarea { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: .5rem .75rem; font-size: .9rem; font-family: inherit; resize: vertical; min-height: 60px; color: var(--text); line-height: 1.6; }
+  textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px #dbeafe; }
+  .del-btn { background: transparent; color: #e11d48; border: 1.5px solid #fecdd3; border-radius: 6px; padding: .3rem .5rem; font-size: .8rem; cursor: pointer; }
+  .del-btn:hover { background: #fff1f2; }
+  .loading { text-align: center; padding: 3rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 日本語テキスト 確認・編集</h1>
+  <span id="job-badge" style="opacity:.8; font-size:.85rem;"></span>
+</header>
+
+<div class="toolbar">
+  <button onclick="saveSegments()">💾 保存</button>
+  <button class="btn-success" onclick="runPipeline()">▶ この内容で英語音声を合成</button>
+  <button class="btn-outline" onclick="window.close()">← 戻る</button>
+  <span id="save-msg"></span>
+</div>
+
+<main>
+  <div class="info">
+    ⚡ Whisper の認識ミスや不自然な表現を修正してください。<br>
+    Claude APIが設定されている場合、フィラーや話し言葉は自動的に整形済みです。<br>
+    修正後「保存」→「英語音声を合成」の順で実行してください。
+  </div>
+  <div id="segment-list"><div class="loading">セグメントを読み込み中...</div></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const jobId  = params.get('job');
+  let segments = [];
+
+  if (!jobId) {
+    document.getElementById('segment-list').innerHTML = '<div class="loading">Job ID が指定されていません。</div>';
+  } else {
+    document.getElementById('job-badge').textContent = 'Job: ' + jobId;
+    loadSegments();
+  }
+
+  async function loadSegments() {
+    const res = await fetch(`/jobs/${jobId}/segments`);
+    if (!res.ok) {
+      document.getElementById('segment-list').innerHTML = '<div class="loading">セグメントが見つかりません。</div>';
+      return;
+    }
+    segments = await res.json();
+    renderSegments();
+  }
+
+  function fmtTime(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toFixed(1).padStart(4, '0');
+    return `${m}:${s}`;
+  }
+
+  function renderSegments() {
+    const list = document.getElementById('segment-list');
+    list.innerHTML = '';
+    segments.forEach((seg, i) => {
+      const row = document.createElement('div');
+      row.className = 'seg-row';
+      row.innerHTML = `
+        <div class="time-cell">${fmtTime(seg.start)}<br>→ ${fmtTime(seg.end)}</div>
+        <textarea data-idx="${i}" rows="3">${esc(seg.text)}</textarea>
+        <button class="del-btn" onclick="deleteRow(${i})">削除</button>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function deleteRow(idx) {
+    segments.splice(idx, 1);
+    renderSegments();
+    showMsg('行を削除しました（未保存）');
+  }
+
+  function collectEdits() {
+    document.querySelectorAll('textarea[data-idx]').forEach(ta => {
+      const i = parseInt(ta.dataset.idx);
+      if (segments[i]) segments[i].text = ta.value;
+    });
+  }
+
+  async function saveSegments() {
+    collectEdits();
+    const res = await fetch(`/jobs/${jobId}/segments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(segments),
+    });
+    showMsg(res.ok ? '✅ 保存しました' : '❌ 保存失敗');
+  }
+
+  async function runPipeline() {
+    await saveSegments();
+    const fd = new FormData();
+    fd.append('voice', 'female');
+    fd.append('subtitle', 'true');
+    const res = await fetch(`/jobs/${jobId}/run`, { method: 'POST', body: fd });
+    if (res.ok) {
+      alert('処理を開始しました。メイン画面で進捗を確認してください。');
+      window.close();
+    } else {
+      alert('処理開始に失敗しました');
+    }
+  }
+
+  function showMsg(msg) {
+    const el = document.getElementById('save-msg');
+    el.textContent = msg;
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+</script>
+</body>
+</html>

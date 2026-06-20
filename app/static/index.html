@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日本語→英語 自動吹き替えシステム Pro</title>
+<style>
+  :root {
+    --primary: #2563eb; --primary-dark: #1d4ed8;
+    --success: #16a34a; --error: #dc2626;
+    --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --muted: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI','Hiragino Sans',sans-serif; background: var(--bg); color: var(--text); }
+  header { background: var(--primary); color: #fff; padding: 1rem 1.5rem; }
+  header h1 { font-size: 1.2rem; font-weight: 700; }
+  header small { opacity: .8; font-size: .85rem; }
+  main { max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .card h2 { font-size: 1rem; font-weight: 600; color: var(--primary); margin-bottom: 1rem; }
+  label { display: block; font-size: .875rem; font-weight: 500; color: var(--muted); margin-bottom: .4rem; }
+  input[type="file"], select { width: 100%; padding: .6rem .8rem; border: 1px solid var(--border); border-radius: 8px; font-size: .9rem; margin-bottom: 1rem; background: #fff; }
+  button { background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: .65rem 1.4rem; font-size: .95rem; font-weight: 600; cursor: pointer; }
+  button:hover { background: var(--primary-dark); }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  .btn-success { background: var(--success); }
+  .btn-success:hover { background: #15803d; }
+  #drop-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 2.5rem; text-align: center; color: var(--muted); cursor: pointer; margin-bottom: 1rem; }
+  #drop-zone.dragover { border-color: var(--primary); background: #eff6ff; }
+  #drop-zone .icon { font-size: 2.5rem; margin-bottom: .5rem; }
+  #file-name { font-size: .85rem; color: var(--primary); font-weight: 500; min-height: 1.2em; }
+  .progress-wrap { background: #e2e8f0; border-radius: 99px; height: 10px; margin: .75rem 0; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--primary); border-radius: 99px; transition: width .4s; width: 0%; }
+  #status-msg { font-size: .9rem; color: var(--muted); min-height: 1.2em; }
+  #status-msg.error { color: var(--error); }
+  #status-msg.done { color: var(--success); font-weight: 600; }
+  .actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
+  .chip { background: #eff6ff; color: var(--primary); border-radius: 99px; padding: .2rem .75rem; font-size: .8rem; font-weight: 600; }
+  .flow { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: .85rem 1rem; font-size: .85rem; color: #166534; margin-bottom: 1rem; line-height: 1.8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ 日本語→英語 自動吹き替えシステム Pro</h1>
+  <small>Whisper 文字起こし → Claude清書 → 編集 → Google翻訳 → 英語音声合成</small>
+</header>
+
+<main>
+  <div class="card">
+    <h2>① 動画・音声ファイルをアップロード</h2>
+    <div class="flow">
+      📋 処理の流れ：<br>
+      アップロード → Whisper文字起こし → <strong>Claude清書</strong>（フィラー除去） → <strong>日本語を確認・編集</strong> → 英語翻訳 → 英語音声合成 → 動画出力
+    </div>
+    <div id="drop-zone">
+      <div class="icon">📁</div>
+      <p>動画・音声ファイルをドロップ<br><small>または クリックして選択</small></p>
+      <div id="file-name"></div>
+    </div>
+    <input type="file" id="file-input" accept="video/*,audio/*" style="display:none">
+    <label>Whisper モデル</label>
+    <select id="model-select">
+      <option value="tiny">tiny（高速・低精度）</option>
+      <option value="base">base</option>
+      <option value="small">small</option>
+      <option value="medium">medium</option>
+      <option value="large-v3" selected>large-v3（高精度・推奨）</option>
+    </select>
+    <button id="upload-btn">アップロード &amp; 文字起こし開始</button>
+  </div>
+
+  <div class="card" id="progress-card" style="display:none">
+    <h2>② 処理状況</h2>
+    <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+    <div id="status-msg">待機中...</div>
+    <div id="job-badge" style="margin-top:.5rem"></div>
+    <div class="actions" id="action-buttons" style="display:none">
+      <button id="edit-btn">📝 日本語を確認・編集</button>
+      <button id="run-btn" class="btn-success" style="display:none">▶ 英語音声を合成して動画を生成</button>
+    </div>
+    <div id="voice-row" style="display:none; margin-top:1rem;">
+      <label>英語 TTS 声優</label>
+      <select id="voice-select">
+        <option value="female">女性 - Jenny（アメリカ英語）</option>
+        <option value="male">男性 - Guy（アメリカ英語）</option>
+        <option value="female2">女性 - Sonia（イギリス英語）</option>
+        <option value="male2">男性 - Ryan（イギリス英語）</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card" id="done-card" style="display:none">
+    <h2>③ ダウンロード</h2>
+    <div class="actions">
+      <a id="dl-video-btn" href="#" download><button class="btn-success">🎬 英語吹き替え動画</button></a>
+      <a id="dl-sub-btn" href="#" download><button>📄 字幕ファイル（SRT）</button></a>
+    </div>
+  </div>
+</main>
+
+<script>
+  let currentJobId = null;
+  let pollTimer    = null;
+
+  const dropZone  = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  let selectedFile = null;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    selectedFile = e.dataTransfer.files[0];
+    document.getElementById('file-name').textContent = selectedFile?.name || '';
+  });
+  fileInput.addEventListener('change', () => {
+    selectedFile = fileInput.files[0];
+    document.getElementById('file-name').textContent = selectedFile?.name || '';
+  });
+
+  document.getElementById('upload-btn').addEventListener('click', async () => {
+    if (!selectedFile) { alert('ファイルを選択してください'); return; }
+    const model = document.getElementById('model-select').value;
+    const fd = new FormData();
+    fd.append('file', selectedFile);
+    fd.append('model', model);
+    const res = await fetch('/upload', { method: 'POST', body: fd });
+    if (!res.ok) { alert('アップロード失敗'); return; }
+    const { job_id } = await res.json();
+    currentJobId = job_id;
+    document.getElementById('progress-card').style.display = '';
+    document.getElementById('done-card').style.display = 'none';
+    document.getElementById('job-badge').innerHTML = `<span class="chip">Job ID: ${job_id}</span>`;
+    startPolling();
+  });
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(pollStatus, 2000);
+  }
+
+  async function pollStatus() {
+    if (!currentJobId) return;
+    const res = await fetch(`/jobs/${currentJobId}/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    document.getElementById('progress-bar').style.width = data.progress + '%';
+    const msg = document.getElementById('status-msg');
+    msg.textContent = data.message;
+    msg.className = data.status === 'error' ? 'error' : data.status === 'done' ? 'done' : '';
+
+    if (data.status === 'ready_to_edit') {
+      document.getElementById('action-buttons').style.display = '';
+      document.getElementById('edit-btn').style.display = '';
+      document.getElementById('run-btn').style.display = '';
+      document.getElementById('voice-row').style.display = '';
+      document.getElementById('edit-btn').onclick = () =>
+        window.open(`/edit?job=${currentJobId}`, '_blank');
+    }
+
+    if (data.status === 'done') {
+      clearInterval(pollTimer);
+      document.getElementById('done-card').style.display = '';
+      const base = `/jobs/${currentJobId}`;
+      document.getElementById('dl-video-btn').href = base + '/download';
+      document.getElementById('dl-sub-btn').href   = base + '/subtitle';
+    }
+
+    if (data.status === 'error') clearInterval(pollTimer);
+  }
+
+  document.getElementById('run-btn')?.addEventListener('click', async () => {
+    if (!currentJobId) return;
+    const voice = document.getElementById('voice-select').value;
+    const fd = new FormData();
+    fd.append('voice', voice);
+    fd.append('subtitle', 'true');
+    await fetch(`/jobs/${currentJobId}/run`, { method: 'POST', body: fd });
+    startPolling();
+  });
+</script>
+</body>
+</html>
