@@ -315,20 +315,45 @@ def _sec_to_srt(s: float) -> str:
     return f"{h:02d}:{m:02d}:{ss:02d},{ms:03d}"
 
 
-def generate_srt(segments: list[dict], output_path: str) -> None:
+def _wrap_subtitle(text: str, lang: str = "en") -> str:
+    """長い字幕を最大2行に分割する。"""
+    # 言語ごとの1行あたり最大文字数
+    max_chars = 20 if lang == "ja" else 42
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+
+    # スペース（英語）または句読点（日本語）で折り返し
+    if lang == "ja":
+        # 日本語: max_chars文字ごとに分割
+        lines = [text[i:i+max_chars] for i in range(0, len(text), max_chars)]
+    else:
+        # 英語: 単語境界で折り返し
+        import textwrap
+        lines = textwrap.wrap(text, width=max_chars)
+
+    # 最大2行まで
+    return "\n".join(lines[:2])
+
+
+def generate_srt(segments: list[dict], output_path: str, lang: str = "en") -> None:
     lines = []
-    for i, seg in enumerate(segments, 1):
-        if not seg.get("text", "").strip():
+    idx = 1
+    for seg in segments:
+        text = seg.get("text", "").strip()
+        if not text:
             continue
+        wrapped = _wrap_subtitle(text, lang)
         lines.append(
-            f"{i}\n{_sec_to_srt(seg['start'])} --> {_sec_to_srt(seg['end'])}\n{seg['text'].strip()}\n"
+            f"{idx}\n{_sec_to_srt(seg['start'])} --> {_sec_to_srt(seg['end'])}\n{wrapped}\n"
         )
+        idx += 1
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
 
 # ── フルパイプライン（翻訳→TTS→動画合成） ───────────────────────────
-def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = True) -> None:
+def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = True, subtitle_lang: str = "en") -> None:
     try:
         job_dir = JOBS_DIR / job_id
         voice   = VOICES.get(voice_key, VOICES["female"])
@@ -379,7 +404,19 @@ def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = T
             json.dump(en_segments, f, ensure_ascii=False, indent=2)
 
         if make_subtitle:
-            generate_srt(en_segments, str(job_dir / "subtitle.srt"))
+            # 字幕言語に応じてセグメントを選択
+            if subtitle_lang == "en":
+                sub_segments = en_segments
+                sub_lang = "en"
+            else:
+                # ja: 編集済み優先 → 清書済み → 生出力
+                edited_path = job_dir / "segments_ja_edited.json"
+                ja_path     = job_dir / "segments_ja.json"
+                sub_path    = edited_path if edited_path.exists() else ja_path
+                with open(sub_path, encoding="utf-8") as f:
+                    sub_segments = json.load(f)
+                sub_lang = "ja"
+            generate_srt(sub_segments, str(job_dir / "subtitle.srt"), lang=sub_lang)
 
         # STEP5: TTS
         update_status(job_id, "processing", 30,
