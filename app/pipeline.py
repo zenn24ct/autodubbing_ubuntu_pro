@@ -337,19 +337,19 @@ def _wrap_subtitle(text: str, lang: str = "en") -> str:
 
 
 def generate_srt(segments: list[dict], output_path: str, lang: str = "en") -> None:
-    lines = []
-    idx = 1
-    for seg in segments:
-        text = seg.get("text", "").strip()
-        if not text:
-            continue
-        wrapped = _wrap_subtitle(text, lang)
-        lines.append(
-            f"{idx}\n{_sec_to_srt(seg['start'])} --> {_sec_to_srt(seg['end'])}\n{wrapped}\n"
-        )
-        idx += 1
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        idx = 1
+        for seg in segments:
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            wrapped = _wrap_subtitle(text, lang)
+            # SRT規格: 番号 → タイムコード → テキスト → 空行
+            f.write(f"{idx}\n")
+            f.write(f"{_sec_to_srt(seg['start'])} --> {_sec_to_srt(seg['end'])}\n")
+            f.write(f"{wrapped}\n")
+            f.write("\n")  # エントリ間の空行（必須）
+            idx += 1
 
 
 # ── フルパイプライン（翻訳→TTS→動画合成） ───────────────────────────
@@ -490,7 +490,7 @@ def run_pipeline(job_id: str, voice_key: str = "female", make_subtitle: bool = T
             subtitle_result = subprocess.run(
                 ["ffmpeg", "-y",
                  "-i", merged_path,
-                 "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2'",
+                 "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2,MarginV=40,WrapStyle=2'",
                  "-c:a", "copy",
                  output_path],
                 capture_output=True, text=True,
