@@ -48,6 +48,10 @@
   <button onclick="saveSegments()">💾 保存</button>
   <button class="btn-success" onclick="runPipeline()">▶ この内容で英語音声を合成</button>
   <button class="btn-outline" onclick="window.close()">← 戻る</button>
+  <select id="subtitle-lang" style="padding:.4rem .7rem; border:1px solid #e2e8f0; border-radius:6px; font-size:.875rem;">
+    <option value="en">英語字幕</option>
+    <option value="ja">日本語字幕（編集済み）</option>
+  </select>
   <span id="save-msg"></span>
 </div>
 
@@ -132,9 +136,11 @@
 
   async function runPipeline() {
     await saveSegments();
+    const subtitleLang = document.getElementById('subtitle-lang').value;
     const fd = new FormData();
     fd.append('voice', 'female');
     fd.append('subtitle', 'true');
+    fd.append('subtitle_lang', subtitleLang);
     const res = await fetch(`/jobs/${jobId}/run`, { method: 'POST', body: fd });
     if (res.ok) {
       alert('処理を開始しました。メイン画面で進捗を確認してください。');
